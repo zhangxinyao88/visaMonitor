@@ -1,13 +1,8 @@
-name: visaMonitor F-1
+name: visaMonitor
 
-# Every 5 minutes. NOTE: GitHub may delay scheduled runs under load, so real
-# cadence can drift to 5-15 min. Keep this repo PUBLIC so Actions minutes stay
-# free (a 5-min cron would blow the 2,000-min/month private-repo budget).
 on:
   schedule:
     - cron: "*/5 * * * *"
-  # Run on demand from the Actions tab (or the GitHub mobile app) -- handy when
-  # your local watcher isn't running, since only it can answer ntfy commands.
   workflow_dispatch:
     inputs:
       mode:
@@ -26,10 +21,6 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    # Official Playwright image, pinned to the same version as requirements.txt.
-    # It ships the BROWSERS pre-installed at /ms-playwright, but not the
-    # playwright *Python package* on /usr/bin/python -- so we pip install that
-    # below (fast, a few seconds; no browser download needed).
     container:
       image: mcr.microsoft.com/playwright/python:v1.61.0-noble
     timeout-minutes: 8
@@ -43,8 +34,6 @@ jobs:
             || python -m pip install --no-cache-dir -r requirements.txt
           python -c "import playwright; print('playwright import OK')"
 
-      # Restore the "what have I already alerted" state from the last run so we
-      # don't push the same date twice. Rolling key: newest cache wins.
       - name: Restore monitor state
         uses: actions/cache/restore@v4
         with:
@@ -54,30 +43,25 @@ jobs:
             visamonitor-state-
 
       - name: Check availability
-        # Search criteria come from repo Variables (Settings > Secrets and
-        # variables > Actions > Variables) so this public workflow file does not
-        # disclose what you are personally watching. The push topic is a Secret.
         env:
-          PLAYWRIGHT_BROWSERS_PATH: /ms-playwright   # use the image's pre-installed browsers
+          PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
           VISA_NTFY_TOPIC: ${{ secrets.VISA_NTFY_TOPIC }}
-          VISA_EMAIL: ${{ secrets.VISA_EMAIL }}          # optional e-mail copy of alerts
-          VISA_NTFY_TOKEN: ${{ secrets.VISA_NTFY_TOKEN }}  # required for e-mail forwarding
           VISA_CITIES: ${{ vars.VISA_CITIES }}
           VISA_TYPE: ${{ vars.VISA_TYPE }}
           VISA_DESC: ${{ vars.VISA_DESC }}
           VISA_DESC_BY_CITY: ${{ vars.VISA_DESC_BY_CITY }}
+          VISA_START: ${{ vars.VISA_START }}
           VISA_CUTOFF: ${{ vars.VISA_CUTOFF }}
           VISA_INCLUDE_EMERGENCY: ${{ vars.VISA_INCLUDE_EMERGENCY }}
           VISA_EMERGENCY_TYPES: ${{ vars.VISA_EMERGENCY_TYPES }}
           VISA_PUSH_REPEAT: ${{ vars.VISA_PUSH_REPEAT }}
           VISA_PUSH_INTERVAL: ${{ vars.VISA_PUSH_INTERVAL }}
           PYTHONUTF8: "1"
-        # Scheduled runs have no inputs, so mode is empty -> "monitor".
         run: |
           case "${{ inputs.mode }}" in
             status)           python monitor.py --check ;;
             emergency-status) python monitor.py --check --emergency ;;
-            *)                python monitor.py --once ;;
+            *)                python window_monitor.py --once ;;
           esac
 
       - name: Save monitor state
